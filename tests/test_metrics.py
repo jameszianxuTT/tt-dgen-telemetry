@@ -6,7 +6,7 @@ import io
 import unittest
 
 from telemetry_tui.__main__ import endpoints_from_args, parser
-from telemetry_tui.app import Dashboard, Metric, Snapshot, parse_endpoint
+from telemetry_tui.app import Dashboard, ExploreState, Metric, Snapshot, parse_endpoint
 from telemetry_tui.metrics import aggregate, parse_prometheus
 
 
@@ -78,6 +78,37 @@ class RateTests(unittest.TestCase):
         metric = Metric("Tokens", "tokens_total", counter=True)
         dashboard._rate(Snapshot(endpoint, 10, 1), metric, 20)
         self.assertIsNone(dashboard._rate(Snapshot(endpoint, 11, 1), metric, 1))
+
+
+class ExplorerTests(unittest.TestCase):
+    def setUp(self):
+        self.prefill = parse_endpoint("prefill", "prefill")
+        self.decode = parse_endpoint("decode", "decode")
+        self.dashboard = Dashboard([self.prefill, self.decode], 1)
+        self.dashboard.available[self.prefill.key] = {"alpha", "beta"}
+        self.dashboard.available[self.decode.key] = {"gamma"}
+        self.state = ExploreState()
+
+    def test_toggle_and_bulk_selection(self):
+        self.state.cursor = 0
+        self.dashboard.handle_explorer_key(self.state, "toggle")
+        self.assertIn("alpha", self.dashboard.enabled[self.prefill.key])
+        self.dashboard.handle_explorer_key(self.state, "n")
+        self.assertEqual(self.dashboard.enabled[self.prefill.key], set())
+        self.dashboard.handle_explorer_key(self.state, "a")
+        self.assertEqual(self.dashboard.enabled[self.prefill.key], {"alpha", "beta"})
+        self.dashboard.handle_explorer_key(self.state, "d")
+        self.assertIn(
+            "tt_engine_prompt_tokens_total",
+            self.dashboard.enabled[self.prefill.key],
+        )
+
+    def test_navigation_and_close(self):
+        self.assertTrue(self.dashboard.handle_explorer_key(self.state, "tab"))
+        self.assertEqual(self.state.source, 1)
+        self.assertTrue(self.dashboard.handle_explorer_key(self.state, "backtab"))
+        self.assertEqual(self.state.source, 0)
+        self.assertFalse(self.dashboard.handle_explorer_key(self.state, "q"))
 
 
 if __name__ == "__main__":

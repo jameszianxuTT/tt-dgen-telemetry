@@ -70,6 +70,8 @@ def main() -> int:
         if exc.name == "rich":
             cli.error("Rich is required; install it with: python3 -m pip install rich")
         raise
+    except RuntimeError as exc:
+        cli.error(str(exc))
     except KeyboardInterrupt:
         return 0
     return 0

@@ -47,7 +47,22 @@ uvx --from . tt-dgen-telemetry \
 ```
 
 Each endpoint option is repeatable. HTTP and HTTPS URLs are also accepted.
-Press Ctrl-C to exit.
+Press `e` to open the metric explorer or `q` to exit.
+
+## Metric explorer
+
+The metric explorer discovers every Prometheus metric currently available from
+each configured source. It is entirely keyboard-driven:
+
+- Up/Down or `j`/`k`: move through metrics
+- Space: enable or disable the highlighted metric
+- Tab/Shift-Tab: switch source
+- `a`: enable all metrics on the current source
+- `n`: disable all metrics on the current source
+- `d`: restore the default metric selection
+- `q` or Escape: return to the dashboard
+
+Selections immediately control which rows appear on the main dashboard.
 
 ## Display
 

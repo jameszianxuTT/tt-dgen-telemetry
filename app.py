@@ -56,6 +56,8 @@ class Metric:
 class ExploreState:
     source: int = 0
     cursor: int = 0
+    query: str = ""
+    searching: bool = False
 
 
 WORKER_COMMON = (
@@ -182,6 +184,10 @@ class KeyReader:
                     b"\x1b[Z": "backtab",
                     b"\t": "tab",
                     b" ": "toggle",
+                    b"\r": "enter",
+                    b"\n": "enter",
+                    b"\x7f": "backspace",
+                    b"\b": "backspace",
                 }.get(data, data.decode(errors="ignore"))
             )
 
@@ -287,11 +293,13 @@ class Dashboard:
                     border_style="cyan",
                 )
             )
-        header = Text(
-            f"tt-d-gen telemetry   refresh {self.interval:g}s   e metrics   q exit",
-            style="bold",
+        header = Text(f"tt-d-gen telemetry   refresh {self.interval:g}s   ", style="bold")
+        header.append(" e  METRIC EXPLORER ", style="bold black on yellow")
+        header.append("   q  exit", style="bold")
+        return Group(
+            Panel(header, border_style="yellow", padding=(0, 1)),
+            Columns(panels, equal=True, expand=True),
         )
-        return Group(header, Columns(panels, equal=True, expand=True))
 
     def render_explorer(self, snapshots: list[Snapshot], state: ExploreState):
         from rich.console import Group
@@ -301,7 +309,10 @@ class Dashboard:
 
         state.source %= len(snapshots)
         snapshot = snapshots[state.source]
-        names = sorted(self.available[snapshot.endpoint.key])
+        all_names = sorted(self.available[snapshot.endpoint.key])
+        names = [
+            name for name in all_names if state.query.casefold() in name.casefold()
+        ]
         if names:
             state.cursor = min(max(state.cursor, 0), len(names) - 1)
         else:
@@ -322,7 +333,11 @@ class Dashboard:
             rate = self._rate(snapshot, metric, value)
             style = "reverse" if index == state.cursor else None
             table.add_row(
-                "[x]" if name in enabled else "[ ]",
+                (
+                    Text("[x]", style="bold green")
+                    if name in enabled
+                    else Text("[ ]", style="dim")
+                ),
                 name,
                 "—" if value is None else _format(value),
                 "—" if rate is None else _format(rate),
@@ -337,21 +352,56 @@ class Dashboard:
             )
             for index, item in enumerate(snapshots)
         )
-        help_text = Text(
-            "↑/↓ or j/k move   Space toggle   Tab source   "
-            "a all   n none   d defaults   q/Esc back",
-            style="dim",
-        )
+        if state.searching:
+            search = Text("Search: ", style="bold yellow")
+            search.append(state.query)
+            search.append("█", style="yellow")
+            help_text = Text("Type to filter   Backspace delete   Enter accept   Esc clear", style="dim")
+        else:
+            search = Text(
+                f"Filter: {state.query or 'none'}   / search",
+                style="yellow" if state.query else "dim",
+            )
+            help_text = Text(
+                "↑/↓ or j/k move   Space toggle   Tab source   "
+                "a all   n none   d defaults   q/Esc back",
+                style="dim",
+            )
         return Group(
             Text.from_markup(f"[bold]Metric explorer[/]   {sources}"),
-            Panel(table, title=f"{len(names)} metrics available"),
+            search,
+            Panel(
+                table,
+                title=f"{len(names)} shown / {len(all_names)} available",
+            ),
             help_text,
         )
 
     def handle_explorer_key(self, state: ExploreState, key: str) -> bool:
         """Apply an explorer key. Return False when the submenu should close."""
         endpoint = self.endpoints[state.source]
-        names = sorted(self.available[endpoint.key])
+        names = [
+            name
+            for name in sorted(self.available[endpoint.key])
+            if state.query.casefold() in name.casefold()
+        ]
+        if state.searching:
+            if key == "\x1b":
+                state.query = ""
+                state.searching = False
+                state.cursor = 0
+            elif key == "enter":
+                state.searching = False
+            elif key == "backspace":
+                state.query = state.query[:-1]
+                state.cursor = 0
+            elif len(key) == 1 and key.isprintable():
+                state.query += key
+                state.cursor = 0
+            return True
+        if key == "/":
+            state.searching = True
+            return True
         if key in {"q", "\x1b"}:
             return False
         if key in {"tab", "backtab"}:
@@ -368,9 +418,9 @@ class Dashboard:
             selected = self.enabled[endpoint.key]
             selected.remove(name) if name in selected else selected.add(name)
         elif key == "a":
-            self.enabled[endpoint.key] = set(names)
+            self.enabled[endpoint.key].update(names)
         elif key == "n":
-            self.enabled[endpoint.key].clear()
+            self.enabled[endpoint.key].difference_update(names)
         elif key == "d":
             self.enabled[endpoint.key] = default_metric_names(endpoint.role)
         return True
@@ -381,7 +431,7 @@ def _format(value: float) -> str:
         return f"{value / 1_000_000:.2f}M"
     if abs(value) >= 1_000:
         return f"{value / 1_000:.2f}k"
-    if value.is_integer():
+    if float(value).is_integer():
         return str(int(value))
     return f"{value:.2f}"
 

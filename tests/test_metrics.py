@@ -5,9 +5,11 @@ import contextlib
 import io
 import unittest
 
+from rich.console import Console
+
 from telemetry_tui.__main__ import endpoints_from_args, parser
 from telemetry_tui.app import Dashboard, ExploreState, Metric, Snapshot, parse_endpoint
-from telemetry_tui.metrics import aggregate, parse_prometheus
+from telemetry_tui.metrics import Sample, aggregate, parse_prometheus
 
 
 class PrometheusTests(unittest.TestCase):
@@ -94,9 +96,11 @@ class ExplorerTests(unittest.TestCase):
         self.dashboard.handle_explorer_key(self.state, "toggle")
         self.assertIn("alpha", self.dashboard.enabled[self.prefill.key])
         self.dashboard.handle_explorer_key(self.state, "n")
-        self.assertEqual(self.dashboard.enabled[self.prefill.key], set())
+        self.assertNotIn("alpha", self.dashboard.enabled[self.prefill.key])
+        self.assertNotIn("beta", self.dashboard.enabled[self.prefill.key])
         self.dashboard.handle_explorer_key(self.state, "a")
-        self.assertEqual(self.dashboard.enabled[self.prefill.key], {"alpha", "beta"})
+        self.assertIn("alpha", self.dashboard.enabled[self.prefill.key])
+        self.assertIn("beta", self.dashboard.enabled[self.prefill.key])
         self.dashboard.handle_explorer_key(self.state, "d")
         self.assertIn(
             "tt_engine_prompt_tokens_total",
@@ -109,6 +113,35 @@ class ExplorerTests(unittest.TestCase):
         self.assertTrue(self.dashboard.handle_explorer_key(self.state, "backtab"))
         self.assertEqual(self.state.source, 0)
         self.assertFalse(self.dashboard.handle_explorer_key(self.state, "q"))
+
+    def test_search_filters_toggle_and_bulk_actions(self):
+        self.dashboard.handle_explorer_key(self.state, "/")
+        for key in "beta":
+            self.dashboard.handle_explorer_key(self.state, key)
+        self.dashboard.handle_explorer_key(self.state, "enter")
+        self.dashboard.handle_explorer_key(self.state, "toggle")
+        self.assertIn("beta", self.dashboard.enabled[self.prefill.key])
+        self.dashboard.enabled[self.prefill.key].add("alpha")
+        self.dashboard.handle_explorer_key(self.state, "n")
+        self.assertNotIn("beta", self.dashboard.enabled[self.prefill.key])
+        self.assertIn("alpha", self.dashboard.enabled[self.prefill.key])
+
+    def test_checkboxes_render_as_literal_enabled_and_disabled_marks(self):
+        self.dashboard.enabled[self.prefill.key].add("alpha")
+        snapshot = Snapshot(
+            self.prefill,
+            scraped_at=10,
+            elapsed_ms=1,
+            metrics={
+                "alpha": [Sample(1, {})],
+                "beta": [Sample(2, {})],
+            },
+        )
+        console = Console(file=io.StringIO(), width=120, record=True)
+        console.print(self.dashboard.render_explorer([snapshot], self.state))
+        output = console.export_text()
+        self.assertIn("[x]", output)
+        self.assertIn("[ ]", output)
 
 
 if __name__ == "__main__":

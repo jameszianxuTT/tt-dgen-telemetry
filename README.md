@@ -57,12 +57,14 @@ each configured source. It is entirely keyboard-driven:
 - Up/Down or `j`/`k`: move through metrics
 - Space: enable or disable the highlighted metric
 - Tab/Shift-Tab: switch source
-- `a`: enable all metrics on the current source
-- `n`: disable all metrics on the current source
+- `/`: search metric names; Enter accepts and Escape clears the filter
+- `a`: enable all currently shown metrics
+- `n`: disable all currently shown metrics
 - `d`: restore the default metric selection
 - `q` or Escape: return to the dashboard
 
-Selections immediately control which rows appear on the main dashboard.
+Enabled metrics have a green `[x]`; disabled metrics have `[ ]`. Selections
+immediately control which rows appear on the main dashboard.
 
 ## Display
 
